@@ -290,7 +290,7 @@ function block(j, un){
 }
 function renderGantt(){
   const g = document.getElementById('gantt');
-  if (!C.staff.length){ g.innerHTML = '<div class="empty"><b>スタッフが登録されていません</b><span>「スタッフ」タブで追加するか、「Excel」タブから取り込んでください。</span></div>'; return; }
+  if (!C.staff.length){ g.innerHTML = '<div class="empty"><b>スタッフが登録されていません</b><span>「スタッフ」タブで追加するか、「Excel」タブから取り込んでください。<br>まず試したい時は、「Excel」タブの「サンプルデータを入れる」が便利です。</span></div>'; return; }
   const W = (DAY_END - DAY_START) * PPM;
   let h = `<div class="g-head"><div class="who"><span>スタッフ</span></div><div class="lane" style="width:${W}px">`;
   for (let t = DAY_START; t <= DAY_END; t += 60) h += `<span class="tick" style="left:${Math.min(Math.max((t - DAY_START) * PPM, 16), W - 16)}px">${t / 60}:00</span>`;
@@ -846,6 +846,103 @@ function applyImport(){
   if (days.length && !days.includes(date)) setDate(days[0]); else { refresh(); render(); }
   toast(note + 'しました');
 }
+
+/* ===== サンプルデータ（架空のスタッフと今日・明日の予定） ===== */
+const SAMPLE_STAFF = [
+  ['佐藤 美咲','make',5,4.8,['和装メイク','日本髪・かつら','洋装メイク','ヘアセット','留袖ヘア'],'07:00','16:00',true],
+  ['鈴木 彩','make',4,4.6,['洋装メイク','ヘアセット','新郎メイク','留袖ヘア'],'08:00','17:00',false],
+  ['高橋 由衣','make',3,4.3,['ヘアセット','新郎メイク','留袖ヘア'],'09:00','18:00',false],
+  ['伊藤 真理','make',4,4.5,['和装メイク','日本髪・かつら','ヘアセット','留袖ヘア'],'06:30','15:30',false],
+  ['渡辺 京子','kitsuke',5,4.9,['白無垢','色打掛','紋付袴','留袖','振袖'],'07:00','16:00',false],
+  ['山本 和子','kitsuke',4,4.4,['留袖','振袖','紋付袴','子ども着物'],'08:00','17:00',false],
+  ['中村 さくら','kitsuke',3,4.2,['ウエディングドレス','カラードレス','留袖','子ども着物'],'09:00','18:00',true],
+  ['小林 優','kitsuke',4,4.6,['ウエディングドレス','カラードレス','色打掛','紋付袴'],'08:00','17:00',false],
+];
+/* [ご家族, 挙式時間, メモ, [[お客様, メニュー, 開始, 所要分, 指名, 英語, メモ], ...]] */
+const SAMPLE_DAYS = [
+  [
+    ['森田家','11:00','神殿・和装',[
+      ['新婦','和装メイク・かつら','07:30',90,'佐藤 美咲',false,'前撮りも担当'],
+      ['新婦','白無垢着付け','09:00',60,'',false,''],
+      ['新郎','新郎メイク','08:30',20,'',false,''],
+      ['新郎','紋付袴着付け','09:00',30,'',false,''],
+      ['新婦母','留袖ヘア','08:00',30,'',false,''],
+      ['新婦母','留袖着付け','08:40',40,'',false,''],
+      ['姪','子ども着物着付け','09:10',30,'',false,'5歳']]],
+    ['スミス家','13:00','チャペル・ドレス',[
+      ['新婦','洋装メイク・ヘア','09:30',120,'',true,'海外からのお客様'],
+      ['新婦','ドレス着付け','11:40',40,'',true,''],
+      ['新婦姉','ヘアセット','10:00',40,'',false,''],
+      ['新婦姉','振袖着付け','10:50',45,'',false,'']]],
+    ['田村家','15:00','チャペル・お色直しあり',[
+      ['新婦','洋装メイク・ヘア','11:30',120,'',false,'肌が敏感なため低刺激の化粧品で'],
+      ['新婦','ドレス着付け','13:40',40,'',false,''],
+      ['新郎母','留袖ヘア','12:30',30,'',false,''],
+      ['新郎母','留袖着付け','13:10',40,'',false,''],
+      ['新婦','カラードレス着付け','16:00',30,'',false,'お色直し'],
+      ['新婦','ヘアチェンジ','16:00',30,'',false,'お色直し']]],
+  ],
+  [
+    ['吉田家','10:30','神殿・和装',[
+      ['新婦','和装メイク・かつら','07:00',90,'',false,''],
+      ['新婦','色打掛着付け','08:40',60,'渡辺 京子',false,''],
+      ['新郎','新郎メイク','08:00',20,'',false,''],
+      ['新郎','紋付袴着付け','08:30',30,'',false,''],
+      ['新婦母','留袖ヘア','07:30',30,'',false,''],
+      ['新婦母','留袖着付け','08:10',40,'',false,'']]],
+    ['石井家','14:00','チャペル',[
+      ['新婦','洋装メイク・ヘア','10:30',120,'鈴木 彩',false,''],
+      ['新婦','ドレス着付け','12:40',40,'',false,''],
+      ['新婦妹','ヘアセット','11:00',40,'',false,''],
+      ['新婦妹','振袖着付け','11:50',45,'',false,''],
+      ['新郎母','留袖着付け','12:00',40,'',false,'']]],
+  ],
+];
+document.getElementById('sp-add').addEventListener('click', e => {
+  if (!db || !CFG || !canWrite) return;
+  confirmClick(e.currentTarget, '本当に入れる', () => {
+    const byName = new Map(CFG.staff.map(s => [s.name.replace(/\s/g, ''), s]));
+    let addedStaff = 0;
+    for (const [name, role, level, rating, skills, start, end, en] of SAMPLE_STAFF){
+      if (byName.has(name.replace(/\s/g, ''))) continue;
+      const s = {id: uidGen('s'), name, role, level, rating, skills, start, end, en, sample: true};
+      CFG.staff.push(s); byName.set(name.replace(/\s/g, ''), s); addedStaff++;
+    }
+    if (addedStaff) saveCfg('サンプルのスタッフを' + addedStaff + '人追加');
+    const base = new Date(); const added = [];
+    SAMPLE_DAYS.forEach((fams, i) => {
+      const dt = new Date(base); dt.setDate(base.getDate() + i);
+      const d = ymd(dt);
+      if (DAYS[d] && ((DAYS[d].jobs || []).length || (DAYS[d].families || []).length)) return;
+      const day = blankDay(d);
+      for (const [name, time, memo, jobs] of fams){
+        const f = {id: uidGen('f'), name, time, memo};
+        day.families.push(f);
+        for (const [person, svc, start, dur, prefName, en, note] of jobs)
+          day.jobs.push({id: uidGen('j'), fam: f.id, person, svc, start, dur, pref: byName.get(prefName.replace(/\s/g, ''))?.id || '', en, note});
+      }
+      day.assign = solve(buildCtx(day), {});
+      day.sample = true; day.last = stamp('サンプルの予定を入れました');
+      DAYS[d] = day; added.push(d);
+      writeDoc('days/' + d, () => DAYS[d]);
+    });
+    if (added.length) setDate(added[0]); else { refresh(); render(); }
+    toast(added.length || addedStaff
+      ? 'サンプルを入れました（スタッフ' + addedStaff + '人・' + added.map(dateLabel).join('と') + 'の予定）'
+      : '今日と明日にはすでに予定があるため、サンプルの予定は入れませんでした');
+  });
+});
+document.getElementById('sp-del').addEventListener('click', e => {
+  if (!db || !CFG || !canWrite) return;
+  confirmClick(e.currentTarget, '本当に消す', () => {
+    const days = Object.keys(DAYS).filter(d => DAYS[d].sample);
+    for (const d of days){ delete DAYS[d]; db.doc('days/' + d).remove().catch(() => toast('消せませんでした。通信を確認してください')); }
+    const n = CFG.staff.filter(s => s.sample).length;
+    CFG.staff = CFG.staff.filter(s => !s.sample);
+    if (n) afterStaffChange('サンプルを消しました（スタッフ' + n + '人・' + days.length + '日分）');
+    else { refresh(); render(); toast(days.length ? 'サンプルの予定を' + days.length + '日分消しました' : '消すサンプルはありません'); }
+  });
+});
 
 /* ===== バックアップ（全データをJSONで保存・復元） ===== */
 document.getElementById('bk-export').onclick = () => {
