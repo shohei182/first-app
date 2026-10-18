@@ -27,7 +27,7 @@ const WEEK = ['日','月','火','水','木','金','土'];
 /* ===== 状態 ===== */
 let CFG = null, DAYS = {}, date = '', DAY = null, C = null;
 let selected = null, view = 'shift';
-let db = null, me = null, uid = null, canWrite = false, loadedDays = false;
+let db = null, uid = null, canWrite = false, loadedDays = false;
 let editJob = null, editFam = null, editStaff = null, importPlan = null;
 
 /* ===== 便利関数 ===== */
@@ -225,7 +225,6 @@ function renderEmpty(){
   document.getElementById('jobs').innerHTML = '';
   document.getElementById('staff').innerHTML = '';
 }
-const names = {};
 function renderHeader(){
   document.getElementById('d-date').value = date;
   const today = ymd(new Date());
@@ -238,7 +237,7 @@ function renderHeader(){
   document.getElementById('sample-pill').hidden = !(DAYS[date]?.sample);
   renderSync();
 }
-async function renderSync(){
+function renderSync(){
   const el = document.getElementById('sync');
   const lasts = [DAYS[date]?.last, CFG?.last].filter(Boolean).sort((a, b) => String(b.at).localeCompare(String(a.at)));
   const L = lasts[0];
@@ -247,19 +246,16 @@ async function renderSync(){
   const time = isNaN(t) ? '' : t.toLocaleString('ja-JP', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'});
   el.innerHTML = '最終更新 <b></b>　<span></span>';
   const b = el.querySelector('b');
-  b.textContent = time + (L.by && names[L.by] ? '・' + names[L.by] : '');
+  b.textContent = time + (L.by ? '・' + L.by : '');
   el.querySelector('span').textContent = L.text || '';
-  if (L.by && !names[L.by] && me?.profiles){
-    try{ const ps = await me.profiles([L.by]); const n = ps?.[L.by]?.name; if (n){ names[L.by] = n; b.textContent = time + '・' + n; } }catch(e){}
-  }
 }
 function applyMode(){
   const pill = document.getElementById('mode-pill');
   if (!db){ pill.className = 'pill err'; pill.textContent = '保存できません'; }
-  else if (canWrite){ pill.className = 'pill live'; pill.textContent = 'この端末に保存中'; }
+  else if (canWrite){ pill.className = 'pill live'; pill.textContent = db.kind === 'firebase' ? '全員で共有中' : 'この端末に保存中'; }
   else { pill.className = 'pill ro'; pill.textContent = '閲覧のみ'; }
   const off = !canWrite || !CFG;
-  document.querySelectorAll('[data-write],[data-pin],[data-unpin],[data-abs],[data-hr],[data-del],[data-edit-job],[data-edit-fam],[data-del-fam],[data-edit-st],#famform input,#famform button,#jobform input,#jobform select,#jobform button,#stform input,#stform select,#stform button,#io-file,#io-apply,#bk-file,#bk-apply').forEach(el => {
+  document.querySelectorAll('[data-write],[data-pin],[data-unpin],[data-abs],[data-hr],[data-del],[data-edit-job],[data-edit-fam],[data-del-fam],[data-edit-st],#famform input,#famform button,#jobform input,#jobform select,#jobform button,#stform input,#stform select,#stform button,#io-file,#io-apply,#bk-file,#bk-apply,#mb-form input,#mb-form button,[data-mb-del]').forEach(el => {
     if (off) el.disabled = true;
     else if (!el.hasAttribute('data-blocked')) el.disabled = false;
   });
@@ -853,8 +849,10 @@ function applyImport(){
 
 /* ===== バックアップ（全データをJSONで保存・復元） ===== */
 document.getElementById('bk-export').onclick = () => {
-  if (!db) return;
-  downloadFile('婚礼美容シフト_バックアップ_' + ymd(new Date()) + '.json', JSON.stringify({app:'bridal-shift', version:1, data: db.dump()}, null, 2), 'application/json');
+  if (!db || !CFG) return;
+  const data = {'settings/main': CFG};
+  for (const d of Object.keys(DAYS)) data['days/' + d] = DAYS[d];
+  downloadFile('婚礼美容シフト_バックアップ_' + ymd(new Date()) + '.json', JSON.stringify({app:'bridal-shift', version:1, data}, null, 2), 'application/json');
 };
 document.getElementById('bk-file').addEventListener('change', async e => {
   const file = e.target.files[0]; e.target.value = '';
@@ -862,14 +860,48 @@ document.getElementById('bk-file').addEventListener('change', async e => {
   try{
     const json = JSON.parse(await file.text());
     if (json?.app !== 'bridal-shift' || !json.data || typeof json.data !== 'object') throw new Error('format');
-    const n = Object.keys(json.data).filter(k => k.startsWith('days/')).length;
+    const days = Object.keys(json.data).filter(k => /^days\/\d{4}-\d{2}-\d{2}$/.test(k));
     const btn = document.getElementById('bk-apply');
-    btn.hidden = false; btn.textContent = 'いまのデータを消して復元（' + n + '日分）';
-    btn.onclick = () => confirmClick(btn, '本当に復元する', () => {
-      db.restore(json.data); btn.hidden = true;
-      refresh(); render(); toast('バックアップから復元しました');
+    btn.hidden = false; btn.textContent = 'いまのデータを消して復元（' + days.length + '日分）';
+    btn.onclick = () => confirmClick(btn, '本当に復元する', async () => {
+      btn.hidden = true;
+      try{
+        for (const d of Object.keys(DAYS)) if (!json.data['days/' + d]) await db.doc('days/' + d).remove();
+        if (json.data['settings/main']) await db.doc('settings/main').set(json.data['settings/main']);
+        for (const k of days) await db.doc(k).set(json.data[k]);
+        toast('バックアップから復元しました');
+      }catch(err){ toast('復元の途中で保存できませんでした。通信を確認して、もう一度復元してください'); }
     });
   }catch(err){ toast('バックアップファイルを読み込めませんでした'); }
+});
+
+/* ===== アプリを使える人（共有モードのみ） ===== */
+let MEMBERS = [], myEmail = '';
+function renderMembers(){
+  const box = document.getElementById('members');
+  box.hidden = db?.kind !== 'firebase';
+  if (box.hidden) return;
+  document.getElementById('mb-list').innerHTML = MEMBERS.map(e => `<tr><td>${esc(e)}${e === myEmail ? ' <span class="chip">あなた</span>' : ''}</td>
+    <td><button class="small danger" data-mb-del="${esc(e)}" ${e === myEmail ? 'disabled data-blocked' : ''}>外す</button></td></tr>`).join('');
+  applyMode();
+}
+function saveMembers(list, note){
+  MEMBERS = list; renderMembers();
+  db.doc('config/members').set({emails: list, last: stamp(note)}).then(() => toast(note), e => toast(e?.code === 'invalid_argument' ? '変更する権限がありません' : '保存できませんでした。通信を確認してください'));
+}
+document.getElementById('mb-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const input = document.getElementById('mb-email');
+  const email = input.value.trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ toast('メールアドレスの形が正しくありません'); return; }
+  if (MEMBERS.includes(email)){ toast('すでに登録されています'); return; }
+  input.value = '';
+  saveMembers([...MEMBERS, email], email + ' を追加しました');
+});
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-mb-del]'); if (!b) return;
+  const email = b.dataset.mbDel;
+  confirmClick(b, '本当に外す', () => saveMembers(MEMBERS.filter(x => x !== email), email + ' を外しました'));
 });
 
 /* ===== 起動 ===== */
@@ -880,15 +912,22 @@ document.getElementById('bk-file').addEventListener('change', async e => {
 })();
 render();
 (async () => {
-  try{ localStorage.setItem('bridal-shift-probe', '1'); localStorage.removeItem('bridal-shift-probe'); db = LocalStore; }catch(e){ db = null; }
+  const conn = await openStore();
+  db = conn.db;
   canWrite = !!db;
+  if (conn.user){
+    uid = conn.user.name; myEmail = conn.user.email;
+    document.getElementById('me-name').textContent = conn.user.name + ' でログイン中';
+    document.getElementById('btn-logout').hidden = false;
+  }
   if (!db){ render(); return; }
+  const lost = () => toast('共有データとの接続が切れました。ページを開き直してください');
   let firstDays = true;
   db.doc('settings/main').onSnapshot(snap => {
     CFG = snap.exists ? clone(snap.data()) : {staff: []};
     if (!Array.isArray(CFG.staff)) CFG.staff = [];
     refresh(); render();
-  });
+  }, lost);
   db.collection('days').onSnapshot(qs => {
     const next = {};
     for (const d of qs.docs) next[d.id] = clone(d.data());
@@ -904,5 +943,9 @@ render();
       }
     }
     if (CFG){ refresh(); render(); if (!document.getElementById('sharebox').hidden) openShare(); }
-  });
+  }, lost);
+  if (db.kind === 'firebase') db.doc('config/members').onSnapshot(snap => {
+    MEMBERS = (snap.exists && Array.isArray(snap.data().emails)) ? snap.data().emails.map(String) : [];
+    renderMembers();
+  }, () => {});
 })();

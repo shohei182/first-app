@@ -148,3 +148,17 @@ textarea{font:inherit;font-size:14px;line-height:1.6;width:100%;padding:12px;bor
 .colhead{font-size:13px;background:var(--sunk);padding:12px 14px;border-radius:8px;overflow-x:auto;line-height:1.7}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:10px;font-size:14px;max-width:calc(100% - 32px);box-shadow:0 8px 24px rgba(0,0,0,.2);z-index:20}
 @media (prefers-reduced-motion:no-preference){.blk{transition:left .25s,width .25s}}
+
+/* ログイン画面 */
+.gate{padding:28px 24px;display:flex;flex-direction:column;gap:12px;max-width:560px;margin:40px auto 0;width:100%}
+.gate p{margin:0}
+body.locked .wrap > :not(#gate){display:none!important}
+input[type=email]{font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);min-width:0}
+
+/* スマホではスタッフ名の列を細くして、シフト表を広く見せる */
+@media (max-width:640px){
+  .g-head,.g-row{grid-template-columns:104px 1fr}
+  .gantt{min-width:calc(104px + 14 * 120px)}
+  .who{padding:8px 10px}
+  .panel{position:static}
+}

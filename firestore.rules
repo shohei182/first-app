@@ -1,0 +1,25 @@
+rules_version = '2';
+// 婚礼美容シフト調整：config/members の emails に登録されたGoogleアカウントだけが読み書きできる
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isMember() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in get(/databases/$(database)/documents/config/members).data.emails;
+    }
+    match /config/members {
+      allow read: if isMember();
+      // 全員を外してしまわないよう、1人以上・自分を含むリストだけ保存できる
+      allow write: if isMember()
+        && request.resource.data.emails is list
+        && request.resource.data.emails.size() > 0
+        && request.auth.token.email.lower() in request.resource.data.emails;
+    }
+    match /settings/{id} {
+      allow read, write: if isMember();
+    }
+    match /days/{id} {
+      allow read, write: if isMember();
+    }
+  }
+}
