@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#6B2E5F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="婚礼シフト">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<title>婚礼美容シフト調整</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <section class="card gate" id="gate" hidden aria-live="polite">
+    <div class="eyebrow">婚礼美容室　メイク・着付け</div>
+    <h1>婚礼美容シフト調整</h1>
+    <p id="gate-msg">読み込んでいます…</p>
+    <div class="actions">
+      <button class="primary" id="gate-login" hidden>Googleでログイン</button>
+      <button id="gate-other" hidden>別のアカウントでログイン</button>
+    </div>
+  </section>
+  <header>
+    <div>
+      <div class="eyebrow">婚礼美容室　メイク・着付け</div>
+      <h1>当日シフトとマッチング</h1>
+      <div class="datebar">
+        <button class="small" id="d-prev" aria-label="前の日">‹ 前日</button>
+        <input type="date" id="d-date" aria-label="日付">
+        <button class="small" id="d-next" aria-label="次の日">翌日 ›</button>
+        <span class="pill sample" id="sample-pill" hidden>架空のサンプルデータ</span>
+        <span class="pill" id="mode-pill">接続中…</span>
+        <span class="note" id="me-name"></span>
+        <button class="small" id="btn-logout" hidden>ログアウト</button>
+      </div>
+      <div class="row" id="daychips" style="margin-top:8px"></div>
+      <div class="sync" id="sync" style="margin-top:6px">共有データを読み込んでいます</div>
+    </div>
+    <div class="actions">
+      <button class="line" id="btn-share">LINEで送る</button>
+      <button class="primary" id="btn-solve" data-write>自動で割り当て直す</button>
+      <button id="btn-unpin" data-write>手動の固定を外す</button>
+    </div>
+  </header>
+
+  <section class="card sharebox" id="sharebox" hidden aria-label="LINEで送る">
+    <div class="sharehead"><div class="famhead" style="padding:0">LINEで送るシフト表</div><button id="btn-share-close">閉じる</button></div>
+    <p class="note">表示中の日のシフトを文面にしました。「LINEで送る」でLINEの送信画面が開きます。開かない時は「文面をコピー」してLINEのトークに貼り付けてください。</p>
+    <textarea id="share-text" readonly rows="12" aria-label="送る文面"></textarea>
+    <div class="actions">
+      <a class="btnlink line" id="share-line" href="https://line.me/R/share" target="_blank" rel="noopener">LINEで送る</a>
+      <button id="btn-copy">文面をコピー</button>
+      <span class="note" id="copy-msg" aria-live="polite"></span>
+    </div>
+  </section>
+
+  <section class="stats" id="stats" aria-label="集計"></section>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-shift" aria-selected="true">シフト表</button>
+    <button class="tab" role="tab" id="tab-jobs" aria-selected="false">予定・施術</button>
+    <button class="tab" role="tab" id="tab-staff" aria-selected="false">スタッフ</button>
+    <button class="tab" role="tab" id="tab-io" aria-selected="false">Excel</button>
+  </div>
+
+  <section id="view-shift">
+    <div class="legend" id="legend"></div>
+    <div class="layout">
+      <div class="card gantt-scroll"><div class="gantt" id="gantt"></div></div>
+      <aside class="card panel" id="panel" aria-live="polite"></aside>
+    </div>
+  </section>
+
+  <section id="view-jobs" hidden class="stack">
+    <div class="cols">
+      <div class="card">
+        <div class="cardhead"><h2 id="fam-form-title">ご家族を登録</h2></div>
+        <form class="form" id="famform">
+          <label>ご家族名<input type="text" id="fm-name" placeholder="例：森田家" required></label>
+          <label>挙式時間<input type="time" id="fm-time" step="300" value="12:00"></label>
+          <label class="wide">メモ（会場・スタイルなど）<input type="text" id="fm-memo" placeholder="例：神殿・和装"></label>
+          <div class="actions wide"><button class="primary" type="submit" id="fm-submit">登録する</button><button type="button" id="fm-cancel" hidden>編集をやめる</button></div>
+        </form>
+      </div>
+      <div class="card">
+        <div class="cardhead"><h2 id="job-form-title">施術枠を追加</h2></div>
+        <form class="form" id="jobform">
+          <label>ご家族<select id="f-fam"></select></label>
+          <label>お客様<input type="text" id="f-person" placeholder="例：新婦母" required></label>
+          <label>メニュー<select id="f-svc"></select></label>
+          <label>開始<input type="time" id="f-start" value="09:00" step="300" required></label>
+          <label>所要（分）<input type="number" id="f-dur" value="40" min="10" max="300" step="5" required></label>
+          <label>指名・前撮り担当<select id="f-pref"><option value="">なし</option></select></label>
+          <label class="wide">メモ<input type="text" id="f-note" placeholder="例：肌が敏感なため低刺激の化粧品で"></label>
+          <label class="switch wide" style="flex-direction:row;color:var(--ink)"><input type="checkbox" id="f-en">英語対応を希望</label>
+          <div class="actions wide"><button class="primary" type="submit" id="f-submit">追加して割り当て</button><button type="button" id="f-cancel" hidden>編集をやめる</button></div>
+        </form>
+      </div>
+    </div>
+    <div class="card" id="jobs"></div>
+  </section>
+
+  <section id="view-staff" hidden class="stack">
+    <div class="card">
+      <div class="cardhead"><h2>スタッフ一覧</h2><button class="primary small" id="st-new" data-write>スタッフを追加</button></div>
+      <p class="note" style="padding:0 16px">「この日の勤務」と「欠勤」は表示中の日だけに反映されます。名前・技術・いつもの勤務時間は全日共通です。</p>
+      <div class="tbl-scroll"><table id="staff"></table></div>
+    </div>
+    <div class="card" id="members" hidden>
+      <div class="cardhead"><h2>アプリを使える人</h2></div>
+      <p class="note" style="padding:0 16px">ここに登録したGoogleアカウント（Gmailなど）でログインした人だけが、シフトを見たり変更したりできます。</p>
+      <form class="form" id="mb-form">
+        <label class="wide">Googleアカウントのメールアドレス<input type="email" id="mb-email" placeholder="例：hanako@gmail.com" autocomplete="off" required></label>
+        <div class="actions wide"><button class="primary" type="submit">追加する</button></div>
+      </form>
+      <div class="tbl-scroll"><table><tbody id="mb-list"></tbody></table></div>
+    </div>
+    <div class="card" id="st-editor" hidden>
+      <div class="cardhead"><h2 id="st-ed-title">スタッフを追加</h2></div>
+      <form class="form" id="stform">
+        <label>名前<input type="text" id="se-name" required></label>
+        <label>担当<select id="se-role"><option value="make">メイク・ヘア</option><option value="kitsuke">着付け</option></select></label>
+        <label>レベル（1〜5）<input type="number" id="se-level" min="1" max="5" step="1" value="3"></label>
+        <label>お客様評価（1.0〜5.0）<input type="number" id="se-rating" min="1" max="5" step="0.1" value="4.5"></label>
+        <label>いつもの開始<input type="time" id="se-start" value="09:00" step="900"></label>
+        <label>いつもの終了<input type="time" id="se-end" value="18:00" step="900"></label>
+        <div class="wide"><div class="sec-title" style="margin-bottom:6px">できる技術</div><div class="skillbox" id="se-skills"></div></div>
+        <label class="switch wide" style="flex-direction:row;color:var(--ink)"><input type="checkbox" id="se-en">英語対応できる</label>
+        <div class="actions wide">
+          <button class="primary" type="submit">保存する</button>
+          <button type="button" id="se-cancel">閉じる</button>
+          <button type="button" class="danger" id="se-delete" hidden>このスタッフを削除</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section id="view-io" hidden class="stack">
+    <div class="cols">
+      <div class="card">
+        <div class="cardhead"><h2>Excelから取り込む</h2></div>
+        <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:12px">
+          <p class="note">「スタッフ」「施術」の2つのシートがあるExcelを選ぶと、内容を確認してから取り込めます。スタッフは名前が同じ人を上書きし、施術は日付ごとに追加します（同じご家族名は1つにまとめます）。</p>
+          <div class="actions">
+            <button id="io-template">テンプレートをダウンロード</button>
+            <label class="btnlink" for="io-file" style="cursor:pointer">Excelファイルを選ぶ</label>
+            <input type="file" id="io-file" accept=".xlsx,.xls,.csv" hidden>
+          </div>
+          <div id="io-preview"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="cardhead"><h2>シートの列</h2></div>
+        <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:10px">
+          <div class="sec-title">「スタッフ」シート</div>
+          <div class="colhead">名前 ｜ 担当（メイク／着付け）｜ レベル（1〜5）｜ 評価 ｜ 技術（「、」区切り）｜ 開始 ｜ 終了 ｜ 英語（○）</div>
+          <div class="sec-title">「施術」シート</div>
+          <div class="colhead">日付 ｜ ご家族 ｜ 挙式時間 ｜ お客様 ｜ メニュー ｜ 開始 ｜ 所要分 ｜ 指名 ｜ 英語（○）｜ メモ</div>
+          <p class="note">メニューは下の名前と同じ表記にしてください。所要分が空なら標準の時間を使います。</p>
+          <div class="chips" id="io-menus"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardhead"><h2>Excelに書き出す</h2></div>
+      <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:10px">
+        <p class="note">表示中の日のシフト（担当つき）とスタッフ一覧を、取り込みと同じ形のExcelで保存します。</p>
+        <div class="actions"><button id="io-export">表示中の日をExcelで保存</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardhead"><h2>バックアップ</h2></div>
+      <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:10px">
+        <p class="note">データはこのブラウザの中に保存されます。ブラウザのデータを消すと消えてしまうので、ときどきバックアップを保存してください。別の端末に移す時も、このファイルで復元できます。</p>
+        <div class="actions">
+          <button id="bk-export">全データをバックアップ</button>
+          <label class="btnlink" for="bk-file" style="cursor:pointer">バックアップから復元</label>
+          <input type="file" id="bk-file" accept=".json,application/json" hidden>
+          <button class="danger" id="bk-apply" hidden></button>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="firebase-config.js"></script>
+<script src="store.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
